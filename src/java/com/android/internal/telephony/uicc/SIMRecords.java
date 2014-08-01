@@ -450,7 +450,7 @@ public class SIMRecords extends IccRecords {
 
     public int getVoiceMessageCount() {
         boolean voiceMailWaiting = false;
-        int countVoiceMessages = 0;
+        int countVoiceMessages = -1;
         if (mEfMWIS != null) {
             // Use this data if the EF[MWIS] exists and
             // has been loaded
@@ -1207,6 +1207,47 @@ public class SIMRecords extends IccRecords {
                 // TODO: Handle other cases, instead of fetching all.
                 mAdnCache.reset();
                 fetchSimRecords();
+                break;
+        }
+    }
+
+    private void handleSimRefresh(IccRefreshResponse refreshResponse){
+        if (refreshResponse == null) {
+            if (DBG) log("handleSimRefresh received without input");
+            return;
+        }
+
+        if (refreshResponse.aid != null &&
+                !refreshResponse.aid.equals(mParentApp.getAid())) {
+            // This is for different app. Ignore.
+            return;
+        }
+
+        switch (refreshResponse.refreshResult) {
+            case IccRefreshResponse.REFRESH_RESULT_FILE_UPDATE:
+                if (DBG) log("handleSimRefresh with SIM_FILE_UPDATED");
+                handleFileUpdate(refreshResponse.efId);
+                break;
+            case IccRefreshResponse.REFRESH_RESULT_INIT:
+                if (DBG) log("handleSimRefresh with SIM_REFRESH_INIT");
+                // need to reload all files (that we care about)
+                onIccRefreshInit();
+                break;
+            case IccRefreshResponse.REFRESH_RESULT_RESET:
+                if (DBG) log("handleSimRefresh with SIM_REFRESH_RESET");
+                mCi.setRadioPower(false, null);
+                /* Note: no need to call setRadioPower(true).  Assuming the desired
+                * radio power state is still ON (as tracked by ServiceStateTracker),
+                * ServiceStateTracker will call setRadioPower when it receives the
+                * RADIO_STATE_CHANGED notification for the power off.  And if the
+                * desired power state has changed in the interim, we don't want to
+                * override it with an unconditional power on.
+                */
+                mAdnCache.reset();
+                break;
+            default:
+                // unknown refresh operation
+                if (DBG) log("handleSimRefresh with unknown operation");
                 break;
         }
     }
